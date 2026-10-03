@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>life-tracker</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div id="offline" class="banner" hidden role="alert">
+  Offline or server unreachable. <button id="retry" type="button">Retry</button>
+</div>
+
+<!-- login: the only place the browser accepts input (local unlock, not data entry) -->
+<section id="view-login" class="view" hidden>
+  <h1>life-tracker</h1>
+  <p class="muted">Local unlock. The agent bearer is never used here.</p>
+  <form id="login-form">
+    <label for="secret">Unlock secret</label>
+    <input id="secret" type="password" autocomplete="current-password" required>
+    <button type="submit">Unlock</button>
+  </form>
+  <p id="login-error" class="error" hidden>Wrong secret.</p>
+</section>
+
+<main id="app" hidden>
+  <nav id="tabs" aria-label="Views">
+    <button data-view="today" class="tab" aria-current="true">Today</button>
+    <button data-view="goals" class="tab">Goals</button>
+    <button data-view="projects" class="tab">Projects</button>
+    <button data-view="data" class="tab">Data</button>
+    <span id="sync" class="sync" aria-live="polite"></span>
+  </nav>
+
+  <!-- TODAY -->
+  <section id="view-today" class="view">
+    <div class="datebar">
+      <button id="day-prev" type="button" aria-label="Previous day">‹</button>
+      <button id="day-today" type="button">Today</button>
+      <span id="day-label" aria-live="polite"></span>
+      <button id="day-next" type="button" aria-label="Next day">›</button>
+    </div>
+    <div id="today-progress" class="progress"></div>
+    <div id="today-body" class="body"></div>
+  </section>
+
+  <!-- GOALS -->
+  <section id="view-goals" class="view" hidden>
+    <p class="hint">Goals are created and restructured by the agent. Here you can only tick completions.</p>
+    <div id="goals-body" class="body"></div>
+  </section>
+
+  <!-- PROJECTS -->
+  <section id="view-projects" class="view" hidden>
+    <div id="projects-body" class="body"></div>
+  </section>
+
+  <!-- DATA — READ ONLY. No inputs, no create/delete/correct controls. -->
+  <section id="view-data" class="view" hidden>
+    <h2>Data</h2>
+    <p class="muted">Read only. The agent is the write interface for logs and metrics.</p>
+    <div id="data-summary" class="body"></div>
+    <h3>Metric</h3>
+    <div id="metric-picker" class="picker" role="group" aria-label="Choose metric"></div>
+    <div id="range-picker" class="picker" role="group" aria-label="Range">
+      <button type="button" data-range="7">7d</button>
+      <button type="button" data-range="30" aria-current="true">30d</button>
+      <button type="button" data-range="90">90d</button>
+      <button type="button" data-range="365">1y</button>
+    </div>
+    <div id="chart" class="chart"></div>
+    <p id="chart-alt" class="muted" aria-live="polite"></p>
+  </section>
+</main>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
