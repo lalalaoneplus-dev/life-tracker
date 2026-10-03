@@ -1,0 +1,111 @@
+name: installers
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install, restart, and stop
+        run: |
+          set -euo pipefail
+          export INSTALL_DIR="${RUNNER_TEMP}/life-tracker"
+          export REPO_URL="${GITHUB_WORKSPACE}"
+          export NO_OPEN=1
+          secrets="${HOME}/.config/life-tracker/env"
+          bash install.sh
+          code="$(curl -fsS -o /dev/null -w '%{http_code}' http://127.0.0.1:8787/)"
+          test "$code" = "200"
+          hash1="$(shasum -a 256 "$secrets" | awk '{print $1}')"
+          bash install.sh
+          hash2="$(shasum -a 256 "$secrets" | awk '{print $1}')"
+          test "$hash1" = "$hash2"
+          code="$(curl -fsS -o /dev/null -w '%{http_code}' http://127.0.0.1:8787/)"
+          test "$code" = "200"
+          bash "${INSTALL_DIR}/stop.sh"
+          closed=0
+          for _ in 1 2 3 4 5 6 7 8 9 10; do
+            if ! lsof -nP -iTCP:8787 -sTCP:LISTEN >/dev/null 2>&1; then
+              closed=1
+              break
+            fi
+            sleep 0.3
+          done
+          test "$closed" = "1"
+      - name: Show logs
+        if: failure()
+        run: |
+          dir="${RUNNER_TEMP}/life-tracker"
+          for f in "$dir"/*.log; do
+            if [[ -f "$f" ]]; then
+              echo "----- $(basename "$f") -----"
+              tail -n 200 "$f" || true
+            fi
+          done
+      - name: Test suite
+        if: always()
+        working-directory: ${{ github.workspace }}
+        run: |
+          python -m pip install -r requirements.txt
+          python -m pytest -q
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install, restart, and stop
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+          $env:INSTALL_DIR = Join-Path $env:RUNNER_TEMP "life-tracker"
+          $env:REPO_URL = $env:GITHUB_WORKSPACE
+          $env:NO_OPEN = "1"
+          $secrets = Join-Path (Join-Path (Join-Path $env:USERPROFILE ".config") "life-tracker") "env"
+          & (Join-Path $env:GITHUB_WORKSPACE "install.ps1")
+          $resp = Invoke-WebRequest -Uri "http://127.0.0.1:8787/" -UseBasicParsing
+          if ([int]$resp.StatusCode -ne 200) { throw "expected HTTP 200" }
+          $hash1 = (Get-FileHash -Algorithm SHA256 -LiteralPath $secrets).Hash
+          & (Join-Path $env:GITHUB_WORKSPACE "install.ps1")
+          $hash2 = (Get-FileHash -Algorithm SHA256 -LiteralPath $secrets).Hash
+          if ($hash1 -ne $hash2) { throw "secrets file changed" }
+          $resp = Invoke-WebRequest -Uri "http://127.0.0.1:8787/" -UseBasicParsing
+          if ([int]$resp.StatusCode -ne 200) { throw "expected HTTP 200 after restart" }
+          & (Join-Path $env:INSTALL_DIR "stop.ps1")
+          $closed = $false
+          foreach ($i in 1..10) {
+            $hit = netstat -ano | Select-String -Pattern ":8787\s" | Select-String -Pattern "LISTENING"
+            if (-not $hit) { $closed = $true; break }
+            Start-Sleep -Milliseconds 300
+          }
+          if (-not $closed) { throw "port 8787 still listening" }
+      - name: Show logs
+        if: failure()
+        shell: powershell
+        run: |
+          $dir = Join-Path $env:RUNNER_TEMP "life-tracker"
+          Get-ChildItem -LiteralPath $dir -Filter *.log -ErrorAction SilentlyContinue | ForEach-Object {
+            Write-Host ("----- " + $_.Name + " -----")
+            Get-Content -LiteralPath $_.FullName -Tail 200
+          }
+      - name: Test suite
+        if: always()
+        shell: powershell
+        working-directory: ${{ github.workspace }}
+        run: |
+          python -m pip install -r requirements.txt
+          python -m pytest -q

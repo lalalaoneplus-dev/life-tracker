@@ -8,11 +8,27 @@ import os
 from pathlib import Path
 from typing import NamedTuple
 
-ENV_FILE = Path.home() / ".config" / "life-tracker" / "env"
 KEYS = ("LIFE_TRACKER_AGENT_TOKEN", "LIFE_TRACKER_SESSION_SECRET", "LIFE_TRACKER_DB")
 
 
-def _read_env_file(path: Path = ENV_FILE) -> dict[str, str]:
+def env_file_path() -> Path:
+    """KEY=VALUE config file.
+
+    macOS uses Path.home()/.config/life-tracker/env. On Windows, if that file
+    is absent, use %USERPROFILE%/.config/life-tracker/env.
+    """
+    primary = Path.home() / ".config" / "life-tracker" / "env"
+    if os.name != "nt" or primary.exists():
+        return primary
+    profile = os.environ.get("USERPROFILE")
+    if not profile:
+        return primary
+    return Path(profile) / ".config" / "life-tracker" / "env"
+
+
+def _read_env_file(path: Path | None = None) -> dict[str, str]:
+    if path is None:
+        path = env_file_path()
     out: dict[str, str] = {}
     if not path.exists():
         return out
@@ -46,5 +62,7 @@ def load_settings(
     db = pick(db_path, "LIFE_TRACKER_DB")
     missing = [k for k, val in zip(KEYS, (token, secret, db)) if not val]
     if missing:
-        raise RuntimeError(f"missing config: {', '.join(missing)} (set in {ENV_FILE} or env vars)")
+        raise RuntimeError(
+            f"missing config: {', '.join(missing)} (set in {env_file_path()} or env vars)"
+        )
     return Settings(agent_token=token, session_secret=secret, db_path=db)
